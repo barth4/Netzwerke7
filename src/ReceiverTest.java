@@ -5,7 +5,7 @@ import java.io.IOException;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class UDPReceiverTest {
+public class ReceiverTest {
 
     Receiver receiver = new Receiver();
 
