@@ -1,8 +1,11 @@
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
@@ -13,6 +16,8 @@ import java.util.zip.Checksum;
 
 public class Receiver implements Runnable {
     public static final String PATH = "d:\\";
+    static final String HOSTNAME = "localhost";
+    static int port = 23456;
     private byte[] buffer;
 
     private DatagramSocket ds;
@@ -27,6 +32,7 @@ public class Receiver implements Runnable {
     File file;
     private int fileSize;
     byte[] data;
+    int counter=0;
 
     public Receiver(byte[] buffer, int port) {
         try {
@@ -63,8 +69,11 @@ public class Receiver implements Runnable {
     public void receive() {
         try {
             while (true) {
+                counter ++;
+                System.out.println("term:"+ counter);
                 ds.receive(dp);
                 buffer = dp.getData();
+                port = dp.getPort();
                 parseByteArray();
                 this.doTransition(this.defineConditon());
             }
@@ -83,7 +92,7 @@ public class Receiver implements Runnable {
     public int parseByteArray() {
         byte[] seqNrBytes = new byte[1];
         byte[] checkSumBytes = new byte[8];
-        //int fileSize = 0;
+        // int fileSize = 0;
         System.arraycopy(buffer, 0, seqNrBytes, 0, seqNrBytes.length);
         System.arraycopy(buffer, 1, checkSumBytes, 0, checkSumBytes.length);
         seqNr = seqNrBytes[0];
@@ -100,27 +109,28 @@ public class Receiver implements Runnable {
             String fileName;
             try {
                 fileName = new String(fileNameByte, "UTF-8");// if the charset is UTF-8; "ISO-8859-1"
-                file = new File (PATH + fileName);
-                fileSize = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16
-                        | (fileLengthByte[2] & 0xFF) << 8 | (fileLengthByte[3] & 0xFF);
+                file = new File(PATH + fileName);
+                fileSize = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16 | (fileLengthByte[2] & 0xFF) << 8
+                        | (fileLengthByte[3] & 0xFF);
 
             } catch (UnsupportedEncodingException e) {
                 e.printStackTrace();
             }
         } else {
-            data = new byte[buffer.length - 9];
-            data = trim(data);
-
-            System.arraycopy(buffer, 9, data, 0, data.length);
+            long dataSize = fileSize - file.length() < buffer.length - 9 ? fileSize - file.length() : buffer.length - 9;
+            data = new byte[(int) dataSize];
+            System.arraycopy(buffer, 9, data, 0, (int) dataSize); //file.length() fileSize
         }
         return fileSize;
 
     }
-/**
- * trims all zero bytes from the file
- * @param bytes
- * @return
- */
+
+    /**
+     * trims all zero bytes from the file
+     * 
+     * @param bytes
+     * @return
+     */
     private byte[] trim(byte[] bytes) {
         int i = bytes.length - 1;
         while (i >= 0 && bytes[i] == 0) {
@@ -133,8 +143,8 @@ public class Receiver implements Runnable {
     public void sendACK() {
         try {
             byte[] seqBytes = new byte[] { (byte) seqNr };
-            DatagramPacket ack = new DatagramPacket(seqBytes, 1);
-            ds.send(ack);
+            InetAddress inetAddr = InetAddress.getByName(HOSTNAME);
+            ds.send(new DatagramPacket(seqBytes, 1, inetAddr, port));
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -157,15 +167,15 @@ public class Receiver implements Runnable {
             dataToCheck = fileNameByte;
         } else {
             dataToCheck = data;
-         }
-   
+        }
+
         long actualChecksum = getChecksum(dataToCheck);
         if (checkSum != actualChecksum || (currentState == State.WAIT_FOR_0 && this.seqNr == 1)
                 || (currentState == State.WAIT_FOR_1 && this.seqNr == 0)) {
             return Condition.DUPLICATE_SQNR_OR_CHECK_NOT_OK;
         }
 
-        if ((currentState != State.IDLE && (long) (data.length + file.length()) == fileSize) || fileSize == 0){
+        if ((currentState != State.IDLE && (long) (data.length + file.length()) == fileSize) || fileSize == 0) {
             return Condition.CHECK_OK_ALL_REC;
         } else {
             return Condition.CHECK_OK_NOT_ALL_REC;
@@ -211,6 +221,7 @@ public class Receiver implements Runnable {
         public State execute(Condition input) {
             try {
                 file.createNewFile();
+                sendACK();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -221,6 +232,8 @@ public class Receiver implements Runnable {
     class ZeroToOne extends Transition {
         @Override
         public State execute(Condition input) {
+            saveFile(data);
+            sendACK();
             return State.WAIT_FOR_1;
         }
     }
@@ -228,6 +241,8 @@ public class Receiver implements Runnable {
     class OneToZero extends Transition {
         @Override
         public State execute(Condition input) {
+            saveFile(data);
+            sendACK();
             return State.WAIT_FOR_0;
         }
     }
@@ -235,6 +250,8 @@ public class Receiver implements Runnable {
     class EndOne extends Transition {
         @Override
         public State execute(Condition input) {
+            saveFile(data);
+            sendACK();
             return State.IDLE;
         }
     }
@@ -242,8 +259,24 @@ public class Receiver implements Runnable {
     class EndZero extends Transition {
         @Override
         public State execute(Condition input) {
+            saveFile(data);
+            sendACK();
             return State.IDLE;
         }
+    }
+
+    public void saveFile(byte data[]) {
+
+        FileOutputStream out;
+        try {
+            out = new FileOutputStream(file.getAbsolutePath(), true);
+            out.write(data);
+            out.close();
+        } catch (Exception e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
     }
 
     public State getCurrentState() {

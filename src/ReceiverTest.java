@@ -88,9 +88,9 @@ public class ReceiverTest {
     public void testRun() {
 
         try {
-            AltBitSender abs = new AltBitSender("localhost", 12345, 1024, "d:\\Studium\\Test_Send.txt", true);
+            AltBitSender abs = new AltBitSender("localhost", 23456, 1024, "d:\\Studium\\SOFIA.jpg", true);
             byte[] buffer = new byte[1024];
-            Receiver rec = new Receiver(buffer, 12345);
+            Receiver rec = new Receiver(buffer, 23456);
             Thread t = new Thread(rec);
             t.start();
             abs.send();
