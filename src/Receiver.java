@@ -1,5 +1,4 @@
 import java.io.File;
-import java.util.zip.CRC32;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.DatagramPacket;
@@ -7,14 +6,14 @@ import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
 
-import javax.swing.text.html.parser.ParserDelegator;
-
-public class Receiver {
+public class Receiver implements Runnable {
     public static final String PATH = "d:\\";
     private byte[] buffer;
-    private int counter = 0;
-    private String name;
 
     private DatagramSocket ds;
     private DatagramPacket dp;
@@ -24,29 +23,30 @@ public class Receiver {
 
     long checkSum;
     private int seqNr;
-    private String fileName;
+    byte[] fileNameByte;
+    File file;
     private int fileSize;
     byte[] data;
 
-     public Receiver(byte[] buffer, int port) {
-     try {
-     this.buffer = buffer;
-     this.ds = new DatagramSocket(port);
-     this.dp = new DatagramPacket(buffer, buffer.length);
-     currentState = State.IDLE;
-     transition = new Transition[State.values().length][Condition.values().length];
-     transition[State.IDLE.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new Start();
-     transition[State.WAIT_FOR_1.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new OneToZero();
-     transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new ZeroToOne();
-     transition[State.WAIT_FOR_1.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndOne();
-     transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndZero();
-     transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndZero();
+    public Receiver(byte[] buffer, int port) {
+        try {
+            this.buffer = buffer;
+            this.ds = new DatagramSocket(port);
+            this.ds.setSoTimeout(3000);
+            this.dp = new DatagramPacket(buffer, buffer.length);
+            currentState = State.IDLE;
+            transition = new Transition[State.values().length][Condition.values().length];
+            transition[State.IDLE.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new Start();
+            transition[State.WAIT_FOR_1.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new OneToZero();
+            transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new ZeroToOne();
+            transition[State.WAIT_FOR_1.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndOne();
+            transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndZero();
+            transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndZero();
 
-    
-     } catch (SocketException e) {
-     e.printStackTrace();
-     }
-     }
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+    }
 
     public Receiver() {
 
@@ -64,8 +64,9 @@ public class Receiver {
         try {
             while (true) {
                 ds.receive(dp);
-                parseByteArray(dp.getData());
-                this.doTransition(this.defineConditon());
+                buffer = dp.getData();
+                parseByteArray(buffer);
+                this.doTransition(this.defineConditon(buffer));
             }
 
         } catch (UnknownHostException e) {
@@ -87,61 +88,82 @@ public class Receiver {
         System.arraycopy(receivedData, 1, checkSumBytes, 0, checkSumBytes.length);
         seqNr = seqNrBytes[0];
 
-        
-        checkSum = checkSumBytes[0] << 56 | (checkSumBytes[1] & 0xFF) << 48 | (checkSumBytes[2] & 0xFF) << 40
-                | (checkSumBytes[3] & 0xFF) << 32 | (checkSumBytes[4] & 0xFF) << 24 | (checkSumBytes[5] & 0xFF) << 16
-                | (checkSumBytes[6] & 0xFF) << 8 | (checkSumBytes[7] & 0xFF);
+        checkSum = ByteBuffer.wrap(checkSumBytes).getLong();
+        checkSum = Long.parseLong(Long.toUnsignedString(checkSum, 10));
 
-        // if (getCurrentState() == State.IDLE) {
-        byte[] fileLengthByte = new byte[4];
-        byte[] fileNameByte = new byte[receivedData.length - 13];
-        System.arraycopy(receivedData, 9, fileLengthByte, 0, fileLengthByte.length);
-        System.arraycopy(receivedData, 13, fileNameByte, 0, fileNameByte.length);
+        if (getCurrentState() == State.IDLE) {
+            byte[] fileLengthByte = new byte[4];
+            fileNameByte = new byte[receivedData.length - 13];
+            System.arraycopy(receivedData, 9, fileLengthByte, 0, fileLengthByte.length);
+            System.arraycopy(receivedData, 13, fileNameByte, 0, fileNameByte.length);
+            fileNameByte = trim(fileNameByte);
+            String fileName;
+            try {
+                fileName = new String(fileNameByte, "UTF-8");// if the charset is UTF-8; "ISO-8859-1"
+                // fileName = fileName.trim();
+                getChecksum(fileName.getBytes());
 
-        String fileName;
-        try {
-            fileName = new String(fileNameByte, "UTF-8");// if the charset is UTF-8; "ISO-8859-1"
-            System.out.println(fileName);
+                fileLength = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16
+                        | (fileLengthByte[2] & 0xFF) << 8 | (fileLengthByte[3] & 0xFF);
 
-            fileLength = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16 | (fileLengthByte[2] & 0xFF) << 8
-                    | (fileLengthByte[3] & 0xFF);
+            } catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
+        } else {
+            data = new byte[receivedData.length - 9];
+            data = trim(data);
 
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
+            System.arraycopy(receivedData, 9, data, 0, data.length);
         }
-        // } else {
-        // data = new byte[receivedData.length - 9];
-        // System.arraycopy(receivedData, 9, data, 0, data.length);
-        // }
         return fileLength;
 
     }
 
+    private byte[] trim(byte[] bytes) {
+        int i = bytes.length - 1;
+        while (i >= 0 && bytes[i] == 0) {
+            --i;
+        }
+
+        return Arrays.copyOf(bytes, i + 1);
+    }
+
     public void sendACK() {
         try {
-            byte [] seqBytes = new byte[] {(byte) seqNr};
+            byte[] seqBytes = new byte[] { (byte) seqNr };
             DatagramPacket ack = new DatagramPacket(seqBytes, 1);
             ds.send(ack);
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-        
+
     }
 
     public static void saveData() {// input param inputstream
     }
 
-    public Condition defineConditon() {
-        CRC32 crc = new CRC32();
-        crc.update(data);
-       long  actualChecksum = crc.getValue();
+    private long getChecksum(byte[] bytes) {
+        Checksum checksum = new CRC32();
+        checksum.update(bytes, 0, bytes.length);
+        return checksum.getValue();
+    }
+
+    public Condition defineConditon(byte[] recievedData) {
+        byte[] dataToCheck;
+        if (currentState == State.IDLE) {
+            dataToCheck = fileNameByte;
+        } else {
+            dataToCheck = data;
+        }
+        //
+        long actualChecksum = getChecksum(dataToCheck);
         if (checkSum != actualChecksum || (currentState == State.WAIT_FOR_0 && this.seqNr == 1)
                 || (currentState == State.WAIT_FOR_1 && this.seqNr == 0)) {
             return Condition.DUPLICATE_SQNR_OR_CHECK_NOT_OK;
         }
-        File file = new File(PATH + fileName);
-        if ((long) (data.length + this.fileSize) == file.length()) {
+
+        if ((long) (recievedData.length + this.fileSize) == file.length()) {
             return Condition.CHECK_OK_ALL_REC;
         } else {
             return Condition.CHECK_OK_NOT_ALL_REC;
@@ -174,7 +196,7 @@ public class Receiver {
     class StayInState extends Transition {
         @Override
         public State execute(Condition input) {
-            if (checkSum == data.length) {
+            if (checkSum == buffer.length) {
                 sendACK();
             }
             return currentState;
@@ -185,7 +207,6 @@ public class Receiver {
     class Start extends Transition {
         @Override
         public State execute(Condition input) {
-            File file = new File(PATH + fileName);
             try {
                 file.createNewFile();
             } catch (IOException e) {
@@ -237,5 +258,10 @@ public class Receiver {
 
     public long getCheckSum() {
         return checkSum;
+    }
+
+    @Override
+    public void run() {
+        this.receive();
     }
 }

@@ -39,6 +39,9 @@ public class AltBitSender {
 	private String fileName;
 	private byte[] fileArray;
 	private int fileLength;
+	
+	private InetAddress inetAddr;
+	private int port;
 
 	/**
 	 * Initializes an AltBitSender.
@@ -60,9 +63,13 @@ public class AltBitSender {
 
 		readFile(filePath);
 
-		socketSend = new DatagramSocket(port, InetAddress.getByName(hostName));
-		socketReceive = new DatagramSocket(port);
-		socketReceive.setSoTimeout(3000);
+//		socketSend = new DatagramSocket(port, InetAddress.getByName(hostName));
+		socketSend = new DatagramSocket();
+		this.packetLength = packetLength;
+		this.inetAddr = InetAddress.getByName(hostName);
+		this.port = port;
+//		socketReceive = new DatagramSocket(port);
+//		socketReceive.setSoTimeout(3000);
 	}
 
 	/**
@@ -106,7 +113,7 @@ public class AltBitSender {
 
 		printPacket(packetByte, "Sender");
 
-		socketSend.send(new DatagramPacket(packetByte, packetLength));
+		socketSend.send(new DatagramPacket(packetByte, packetLength, inetAddr, port));
 	}
 
 	/**
@@ -128,7 +135,7 @@ public class AltBitSender {
 
 		printPacket(packetByte, "Sender");
 
-		socketSend.send(new DatagramPacket(packetByte, packetLength));
+		socketSend.send(new DatagramPacket(packetByte, packetLength, inetAddr, port));
 	}
 
 	/**
@@ -139,9 +146,9 @@ public class AltBitSender {
 	 */
 	private boolean receiveAck() throws IOException {
 		byte[] ack = new byte[1];
-		DatagramPacket packet = new DatagramPacket(ack, ack.length);
+		DatagramPacket packet = new DatagramPacket(ack, ack.length, inetAddr, port);
 		try {
-			socketReceive.receive(packet);
+			socketSend.receive(packet);
 			printPacket(ack, "Empfaenger");
 			if (ack[0] == seq) { //Check if send seq equals ack
 				return true;

@@ -1,6 +1,8 @@
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.SocketException;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -49,7 +51,7 @@ public class ReceiverTest {
         Assert.assertEquals(Receiver.State.IDLE, receiver.getCurrentState());
     }
 
-    @Test
+    // @Test
 
     public void testExecuteStart() {
         int seqNr = 1;
@@ -80,5 +82,31 @@ public class ReceiverTest {
         Assert.assertEquals(1695609641, receiver.parseByteArray(wholeArray));
         Assert.assertEquals(654321789, receiver.getCheckSum());
         Assert.assertEquals(1, receiver.getSeqNr());
+    }
+
+    @Test
+    public void testRun() {
+
+        try {
+            AltBitSender abs = new AltBitSender("localhost", 12345, 1024, "d:\\Studium\\Test_Send.txt", true);
+            byte[] buffer = new byte[1024];
+            Receiver rec = new Receiver(buffer, 12345);
+            Thread t = new Thread(rec);
+            t.start();
+            abs.send();
+        } catch (SocketException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        } catch (FileNotFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        } catch (NullPointerException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
     }
 }
