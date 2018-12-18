@@ -9,6 +9,10 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.Random;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
@@ -23,6 +27,11 @@ public class AltBitSender {
 
 	private DatagramSocket socketSend;
 	private DatagramSocket socketReceive;
+
+	//Every chance has to be <=1
+	private final double chanceDelete = 0.1;
+	private final double chanceDuplicate = 0.05;
+	private final double chanceWrongBits = 0.05;
 
 	//Count from 0
 	private final int startSeq = 0;
@@ -86,7 +95,6 @@ public class AltBitSender {
 				}
 			} while (!ackReceived);
 		}
-
 	}
 
 	/**
@@ -100,13 +108,13 @@ public class AltBitSender {
 		byte[] packetByte = new byte[packetLength];
 		byte[] data = fileName.getBytes();
 		packetByte[0] = seq;
-		writeIntoByteArray(packetByte, ByteBuffer.allocate(8).putLong(getChecksum(data)).array(), startChecksum);
-		writeIntoByteArray(packetByte, ByteBuffer.allocate(4).putInt(fileLength).array(), startFileLength);
+		writeIntoByteArray(packetByte, ByteBuffer.allocate(Long.BYTES).putLong(getChecksum(data)).array(), startChecksum);
+		writeIntoByteArray(packetByte, ByteBuffer.allocate(Integer.BYTES).putInt(fileLength).array(), startFileLength);
 		writeIntoByteArray(packetByte, data, startFileName);
 
 		printPacket(packetByte, "Sender");
 
-		socketSend.send(new DatagramPacket(packetByte, packetLength));
+		sendPacket(packetByte);
 	}
 
 	/**
@@ -123,12 +131,32 @@ public class AltBitSender {
 		//Create packet
 		byte[] packetByte = new byte[packetLength];
 		packetByte[startSeq] = seq;
-		writeIntoByteArray(packetByte, ByteBuffer.allocate(8).putLong(getChecksum(data)).array(), 1);
+		writeIntoByteArray(packetByte, ByteBuffer.allocate(Long.BYTES).putLong(getChecksum(data)).array(), startChecksum);
 		writeIntoByteArray(packetByte, data, startFileData);
 
 		printPacket(packetByte, "Sender");
 
-		socketSend.send(new DatagramPacket(packetByte, packetLength));
+		sendPacket(packetByte);
+	}
+	
+	/**
+	 * Sends a packet to the receiver. It calls first a method to simulate an
+	 * unreliable channel with dropping packets, duplicating packets and 
+	 * change (wrong bits) packets.
+	 * 
+	 * @param packet to be sent
+	 * @throws IOException if connection is bad
+	 */
+	private void sendPacket(byte[] packet) throws IOException {
+		boolean dublicate = simulateUnreliableChannel(packet);
+
+		DatagramPacket dp = new DatagramPacket(packet, packet.length);
+		
+		if (dublicate) {
+			socketSend.send(dp);
+		}
+		
+		socketSend.send(dp);
 	}
 
 	/**
@@ -150,6 +178,33 @@ public class AltBitSender {
 		} catch (SocketTimeoutException e) {
 			printPacket("Timeout".getBytes(), "Empfaenger");
 		} //return false timeout
+		return false;
+	}
+	
+	/**
+	 * Simulates an unreliable channel. It returns true if the packet should
+	 * be duplicated otherwise false. In addition it changes the packet, either 
+	 * it inverts the packet (bit failure) or it deletes the packet (packet dropped).
+	 * 
+	 * @param packet to be changed
+	 * @return true if the packet should be dublicated
+	 */
+	private boolean simulateUnreliableChannel(byte[] packet) {
+		Random chance = new Random();
+		if (chance.nextDouble() <= chanceDelete) {
+			packet = new byte[0];
+		}
+		
+		if (chance.nextDouble() <= chanceWrongBits) {
+			Collections.reverse(Arrays.asList(packet)); //Reverses array (List reverses the array too)
+			BitSet bitset = BitSet.valueOf(packet);
+			bitset.flip(0, bitset.length()); //Invert the array
+			packet = bitset.toByteArray();
+		}
+		
+		if (chance.nextDouble() <= chanceDuplicate) {
+			return true;
+		}
 		return false;
 	}
 
