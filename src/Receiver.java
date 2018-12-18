@@ -65,8 +65,8 @@ public class Receiver implements Runnable {
             while (true) {
                 ds.receive(dp);
                 buffer = dp.getData();
-                parseByteArray(buffer);
-                this.doTransition(this.defineConditon(buffer));
+                parseByteArray();
+                this.doTransition(this.defineConditon());
             }
 
         } catch (UnknownHostException e) {
@@ -80,12 +80,12 @@ public class Receiver implements Runnable {
         }
     }
 
-    public int parseByteArray(byte[] receivedData) {
+    public int parseByteArray() {
         byte[] seqNrBytes = new byte[1];
         byte[] checkSumBytes = new byte[8];
-        int fileLength = 0;
-        System.arraycopy(receivedData, 0, seqNrBytes, 0, seqNrBytes.length);
-        System.arraycopy(receivedData, 1, checkSumBytes, 0, checkSumBytes.length);
+        //int fileSize = 0;
+        System.arraycopy(buffer, 0, seqNrBytes, 0, seqNrBytes.length);
+        System.arraycopy(buffer, 1, checkSumBytes, 0, checkSumBytes.length);
         seqNr = seqNrBytes[0];
 
         checkSum = ByteBuffer.wrap(checkSumBytes).getLong();
@@ -93,32 +93,34 @@ public class Receiver implements Runnable {
 
         if (getCurrentState() == State.IDLE) {
             byte[] fileLengthByte = new byte[4];
-            fileNameByte = new byte[receivedData.length - 13];
-            System.arraycopy(receivedData, 9, fileLengthByte, 0, fileLengthByte.length);
-            System.arraycopy(receivedData, 13, fileNameByte, 0, fileNameByte.length);
+            fileNameByte = new byte[buffer.length - 13];
+            System.arraycopy(buffer, 9, fileLengthByte, 0, fileLengthByte.length);
+            System.arraycopy(buffer, 13, fileNameByte, 0, fileNameByte.length);
             fileNameByte = trim(fileNameByte);
             String fileName;
             try {
                 fileName = new String(fileNameByte, "UTF-8");// if the charset is UTF-8; "ISO-8859-1"
-                // fileName = fileName.trim();
-                getChecksum(fileName.getBytes());
-
-                fileLength = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16
+                file = new File (PATH + fileName);
+                fileSize = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16
                         | (fileLengthByte[2] & 0xFF) << 8 | (fileLengthByte[3] & 0xFF);
 
             } catch (UnsupportedEncodingException e) {
                 e.printStackTrace();
             }
         } else {
-            data = new byte[receivedData.length - 9];
+            data = new byte[buffer.length - 9];
             data = trim(data);
 
-            System.arraycopy(receivedData, 9, data, 0, data.length);
+            System.arraycopy(buffer, 9, data, 0, data.length);
         }
-        return fileLength;
+        return fileSize;
 
     }
-
+/**
+ * trims all zero bytes from the file
+ * @param bytes
+ * @return
+ */
     private byte[] trim(byte[] bytes) {
         int i = bytes.length - 1;
         while (i >= 0 && bytes[i] == 0) {
@@ -149,21 +151,21 @@ public class Receiver implements Runnable {
         return checksum.getValue();
     }
 
-    public Condition defineConditon(byte[] recievedData) {
+    public Condition defineConditon() {
         byte[] dataToCheck;
         if (currentState == State.IDLE) {
             dataToCheck = fileNameByte;
         } else {
             dataToCheck = data;
-        }
-        //
+         }
+   
         long actualChecksum = getChecksum(dataToCheck);
         if (checkSum != actualChecksum || (currentState == State.WAIT_FOR_0 && this.seqNr == 1)
                 || (currentState == State.WAIT_FOR_1 && this.seqNr == 0)) {
             return Condition.DUPLICATE_SQNR_OR_CHECK_NOT_OK;
         }
 
-        if ((long) (recievedData.length + this.fileSize) == file.length()) {
+        if ((currentState != State.IDLE && (long) (data.length + file.length()) == fileSize) || fileSize == 0){
             return Condition.CHECK_OK_ALL_REC;
         } else {
             return Condition.CHECK_OK_NOT_ALL_REC;
