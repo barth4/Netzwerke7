@@ -22,7 +22,6 @@ public class AltBitSender {
     private boolean log;
 
     private DatagramSocket socketSend;
-    private DatagramSocket socketReceive;
 
     // Count from 0
     private final int startSeq = 0;
