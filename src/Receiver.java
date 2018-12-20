@@ -34,7 +34,7 @@ public class Receiver implements Runnable {
     File file;
     private int fileSize;
     byte[] data;
-    int counter=0;
+    int counter = 0;
 
     public Receiver(byte[] buffer, int port) {
         try {
@@ -71,22 +71,24 @@ public class Receiver implements Runnable {
     public void receive() {
         try {
             while (true) {
-               
-                counter ++;
-                System.out.println("turn:"+ counter);
+
+                counter++;
+                System.out.println("turn:" + counter);
                 ds.receive(dp);
-                if(currentState == State.IDLE) {
+                if (currentState == State.IDLE) {
                     addressToSend = dp.getAddress();
                     portToSend = dp.getPort();
                 }
-                System.out.println("receiving completed"+ counter);
+                System.out.println("receiving completed" + counter);
 
                 buffer = dp.getData();
                 port = dp.getPort();
                 System.out.println("wait for parse");
-                parseByteArray();
+                int number = parseByteArray();
                 System.out.println("parse completed");
+                if (number !=0) {
                 this.doTransition(this.defineConditon());
+                }
             }
 
         } catch (UnknownHostException e) {
@@ -105,11 +107,13 @@ public class Receiver implements Runnable {
         byte[] checkSumBytes = new byte[8];
         // int fileSize = 0;
         System.arraycopy(buffer, 0, seqNrBytes, 0, seqNrBytes.length);
-       int seqToPrint = (int) seqNrBytes[0];
-       System.out.println("sended sequenznr: " + seqToPrint);
+        int seqToPrint = (int) seqNrBytes[0];
+        System.out.println("sended sequenznr: " + seqToPrint);
         System.arraycopy(buffer, 1, checkSumBytes, 0, checkSumBytes.length);
         seqNr = seqNrBytes[0];
-
+        if (seqNr != 0 && seqNr != 1) {
+            return 0; //TODO
+        }
         checkSum = ByteBuffer.wrap(checkSumBytes).getLong();
         checkSum = Long.parseLong(Long.toUnsignedString(checkSum, 10));
 
@@ -133,13 +137,13 @@ public class Receiver implements Runnable {
             System.out.println("FileSize = " + fileSize + " FileLänge = " + file.length());
             long dataSize = fileSize - file.length() < buffer.length - 9 ? fileSize - file.length() : buffer.length - 9;
             data = new byte[(int) dataSize];
-            System.arraycopy(buffer, 9, data, 0, (int) dataSize); //file.length() fileSize
+            System.arraycopy(buffer, 9, data, 0, (int) dataSize); // file.length() fileSize
             System.out.println("New data: ");
-            
+
             for (int j = 0; j < data.length; j++) {
                 System.out.print(data[j]);
             }
-            
+
             System.out.println("");
             System.out.println("Länge der Nutzdaten:" + data.length);
         }
@@ -165,11 +169,11 @@ public class Receiver implements Runnable {
     public void sendACK() {
         try {
             byte[] seqBytes = new byte[] { (byte) seqNr };
-            
-            ds.send(new DatagramPacket(seqBytes, 1,addressToSend, portToSend));
-            
+
+            ds.send(new DatagramPacket(seqBytes, 1, addressToSend, portToSend));
+
             System.out.println("ack gesendet" + seqBytes[0]);
-            
+
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -194,9 +198,9 @@ public class Receiver implements Runnable {
             dataToCheck = data;
         }
 
-         actualChecksum = getChecksum(dataToCheck);
-         System.out.println("New Checksum: " + actualChecksum);
-         
+        actualChecksum = getChecksum(dataToCheck);
+        System.out.println("New Checksum: " + actualChecksum);
+
         if (checkSum != actualChecksum || (currentState == State.WAIT_FOR_0 && this.seqNr == 1)
                 || (currentState == State.WAIT_FOR_1 && this.seqNr == 0)) {
             return Condition.DUPLICATE_SQNR_OR_CHECK_NOT_OK;
@@ -239,7 +243,7 @@ public class Receiver implements Runnable {
         @Override
         public State execute(Condition input) {
             System.out.println("Wir bleiben im Zustand");
-            System.out.println("Checksum: " +checkSum + " ; " + "actual checksum " + actualChecksum );
+            System.out.println("Checksum: " + checkSum + " ; " + "actual checksum " + actualChecksum);
             if (checkSum == actualChecksum) {
                 sendACK();
             }
@@ -253,7 +257,7 @@ public class Receiver implements Runnable {
         public State execute(Condition input) {
             try {
                 file.createNewFile();
-                
+
                 sendACK();
             } catch (IOException e) {
                 e.printStackTrace();
