@@ -9,6 +9,10 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.BitSet;
+import java.util.Collections;
+import java.util.Random;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
@@ -29,6 +33,11 @@ public class AltBitSender {
     private final int startFileData = 9;
     private final int startFileLength = 9;
     private final int startFileName = 13;
+    
+	//Every chance has to be <=1
+	private final double chanceDelete = 0.1;
+	private final double chanceDuplicate = 0.05;
+	private final double chanceWrongBits = 0.05;
 
     private int packetLength;
     private int packetFileDataLength;
@@ -124,7 +133,7 @@ public class AltBitSender {
 
         printPacket(packetByte, "Sender");
 
-        socketSend.send(new DatagramPacket(packetByte, packetLength, inetAddr, port));
+        sendPacket(packetByte);
     }
 
     /**
@@ -151,8 +160,55 @@ public class AltBitSender {
 
         printPacket(packetByte, "Sender");
 
-        socketSend.send(new DatagramPacket(packetByte, packetLength, inetAddr, port));
+        sendPacket(packetByte);
     }
+    
+	/**
+	 * Sends a packet to the receiver. It calls first a method to simulate an
+	 * unreliable channel with dropping packets, duplicating packets and 
+	 * change (wrong bits) packets.
+	 * 
+	 * @param packet to be sent
+	 * @throws IOException if connection is bad
+	 */
+	private void sendPacket(byte[] packet) throws IOException {
+		boolean dublicate = simulateUnreliableChannel(packet);
+
+		DatagramPacket dp = new DatagramPacket(packet, packetLength, inetAddr, port);
+		
+		if (dublicate) {
+			socketSend.send(dp);
+		}
+		
+		socketSend.send(dp);
+	}
+    
+    /**
+	 * Simulates an unreliable channel. It returns true if the packet should
+	 * be duplicated otherwise false. In addition it changes the packet, either 
+	 * it inverts the packet (bit failure) or it deletes the packet (packet dropped).
+	 * 
+	 * @param packet to be changed
+	 * @return true if the packet should be dublicated
+	 */
+	private boolean simulateUnreliableChannel(byte[] packet) {
+		Random chance = new Random();
+		if (chance.nextDouble() <= chanceDelete) {
+			packet = new byte[0];
+		}
+		
+		if (chance.nextDouble() <= chanceWrongBits) {
+			Collections.reverse(Arrays.asList(packet)); //Reverses array (List reverses the array too)
+			BitSet bitset = BitSet.valueOf(packet);
+			bitset.flip(0, bitset.length()); //Invert the array
+			packet = bitset.toByteArray();
+		}
+		
+		if (chance.nextDouble() <= chanceDuplicate) {
+			return true;
+		}
+		return false;
+	}
 
     /**
      * Tries to receive the acknowledge number and checks if it is correct.
