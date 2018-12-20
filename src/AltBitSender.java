@@ -176,14 +176,20 @@ public class AltBitSender {
 	 * @throws IOException if connection is bad
 	 */
 	private void sendPacket(byte[] packet) throws IOException {
-		packet = simulateUnreliableChannel(packet);
-		boolean dublicate = false; //TODO
+		Random chance = new Random();
 
-		DatagramPacket dp = new DatagramPacket(packet, packetLength, inetAddr, port);
+		if (simulateDelete(chance)) {
+			return;
+		}
 
 		if (packet.length != 0) {
+			packet = simulateWrongBits(packet, chance);
+
+			DatagramPacket dp = new DatagramPacket(packet, packetLength, inetAddr, port);
+
 			System.out.println("Current Length: " + packet.length);
-			if (dublicate) {
+			
+			if (simulateDuplicate(chance)) {
 				socketSend.send(dp);
 			}
 
@@ -199,13 +205,7 @@ public class AltBitSender {
 	 * @param packet to be changed
 	 * @return true if the packet should be dublicated
 	 */
-	private byte[] simulateUnreliableChannel(byte[] packet) {
-		Random chance = new Random();
-		if (chance.nextDouble() <= chanceDelete) {
-			packet = new byte[0];
-			System.out.println("Deleted");
-		}
-
+	private byte[] simulateWrongBits(byte[] packet, Random chance) {
 		if (chance.nextDouble() <= chanceWrongBits) {
 			Collections.reverse(Arrays.asList(packet)); //Reverses array (List reverses the array too)
 			BitSet bitset = BitSet.valueOf(packet);
@@ -214,11 +214,24 @@ public class AltBitSender {
 			System.out.println("Wrong Bits");
 		}
 
+		return packet;
+	}
+
+	private boolean simulateDuplicate(Random chance) {
 		if (chance.nextDouble() <= chanceDuplicate) {
 			System.out.println("Duplicate");
-//			return true;
+			return true;
 		}
-		return packet;
+
+		return false;
+	}
+
+	private boolean simulateDelete(Random chance) {
+		if (chance.nextDouble() <= chanceDelete) {
+			System.out.println("Deleted");
+			return true;
+		}
+		return false;
 	}
 
 	/**
