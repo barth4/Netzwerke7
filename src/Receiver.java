@@ -15,7 +15,7 @@ import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
 public class Receiver implements Runnable {
-    public static final String PATH = "d:\\";
+    public static final String PATH = "test";
     static final String HOSTNAME = "localhost";
     static int port = 23456;
     private byte[] buffer;
@@ -35,6 +35,7 @@ public class Receiver implements Runnable {
     private int fileSize;
     byte[] data;
     int counter = 0;
+    int dataCounter = 0;
 
     public Receiver(byte[] buffer, int port) {
         try {
@@ -129,13 +130,20 @@ public class Receiver implements Runnable {
                 file = new File(PATH + fileName);
                 fileSize = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16 | (fileLengthByte[2] & 0xFF) << 8
                         | (fileLengthByte[3] & 0xFF);
-
+                dataCounter = fileSize / (buffer.length - 9);
+//                if (fileSize % (buffer.length - 9) != 0) {
+//                	++dataCounter;
+//                }
             } catch (UnsupportedEncodingException e) {
                 e.printStackTrace();
             }
         } else {
+        	long dataSize = buffer.length - 9;
+        	if (dataCounter == 0) {
+        		dataSize = fileSize % (buffer.length - 9);
+        	}
             System.out.println("FileSize = " + fileSize + " FileLänge = " + file.length());
-            long dataSize = fileSize - file.length() < buffer.length - 9 ? fileSize - file.length() : buffer.length - 9;
+//            long dataSize = fileSize - file.length() < buffer.length - 9 ? fileSize - file.length() : buffer.length - 9;
             data = new byte[(int) dataSize];
             System.arraycopy(buffer, 9, data, 0, (int) dataSize); // file.length() fileSize
             System.out.println("New data: ");
@@ -200,7 +208,7 @@ public class Receiver implements Runnable {
 
         actualChecksum = getChecksum(dataToCheck);
         System.out.println("New Checksum: " + actualChecksum);
-
+System.out.println("Current Seq: " + this.seqNr);
         if (checkSum != actualChecksum || (currentState == State.WAIT_FOR_0 && this.seqNr == 1)
                 || (currentState == State.WAIT_FOR_1 && this.seqNr == 0)) {
             return Condition.DUPLICATE_SQNR_OR_CHECK_NOT_OK;
@@ -270,6 +278,7 @@ public class Receiver implements Runnable {
         @Override
         public State execute(Condition input) {
             saveFile(data);
+            --dataCounter;
             sendACK();
             return State.WAIT_FOR_1;
         }
@@ -280,6 +289,7 @@ public class Receiver implements Runnable {
         public State execute(Condition input) {
             System.out.println("Now in transition method onetozero");
             saveFile(data);
+            --dataCounter;
             sendACK();
             System.out.println("Now in transition method onetozero ack sended");
             return State.WAIT_FOR_0;

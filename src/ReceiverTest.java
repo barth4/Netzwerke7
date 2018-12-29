@@ -83,16 +83,43 @@ public class ReceiverTest {
 //        Assert.assertEquals(654321789, receiver.getCheckSum());
 //        Assert.assertEquals(1, receiver.getSeqNr());
 //    }
+	
+//	@Test
+//	public void testRunRemote() {
+//		AltBitSender sender;
+//		try {
+//			sender = new AltBitSender("10.179.5.36", 23456, 1024, "test2.png", true);
+//			sender.send();
+//		} catch (SocketException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		} catch (FileNotFoundException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		} catch (NullPointerException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		} catch (IOException e) {
+//			// TODO Auto-generated catch block
+//			e.printStackTrace();
+//		}
+//	}
 
     @Test
     public void testRun() {
 
         try {
-            AltBitSender abs = new AltBitSender("localhost", 23456, 1024, "d:\\Studium\\SOFIA.jpg", true);
+            AltBitSender abs = new AltBitSender("localhost", 23457, 23456, 1024, "test2.png", true);
             byte[] buffer = new byte[1024];
             Receiver rec = new Receiver(buffer, 23456);
             Thread t = new Thread(rec);
             t.start();
+            try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
             abs.send();
         } catch (SocketException e) {
             // TODO Auto-generated catch block

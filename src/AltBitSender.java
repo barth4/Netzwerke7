@@ -9,9 +9,6 @@ import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.BitSet;
-import java.util.Collections;
 import java.util.Random;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
@@ -50,6 +47,7 @@ public class AltBitSender {
 
 	private InetAddress inetAddr;
 	private int port;
+	private int port2; //Nur fuer localhost
 
 	/**
 	 * Initializes an AltBitSender.
@@ -73,15 +71,16 @@ public class AltBitSender {
 	 * @throws NullPointerException
 	 *             if some parameters are null
 	 */
-	public AltBitSender(String hostName, int port, int packetLength, String filePath, boolean log)
+	public AltBitSender(String hostName, int port, int port2, int packetLength, String filePath, boolean log)
 			throws SocketException, FileNotFoundException, IOException, NullPointerException {
 		this.packetLength = packetLength;
 		this.packetFileDataLength = packetLength - startFileData;
 		this.log = log;
 
+		this.port2 = port2;
+
 		readFile(filePath);
 
-		// socketSend = new DatagramSocket(port, InetAddress.getByName(hostName));
 		socketSend = new DatagramSocket(port);
 		socketSend.setSoTimeout(1000);
 		this.packetLength = packetLength;
@@ -183,12 +182,16 @@ public class AltBitSender {
 		}
 
 		if (packet.length != 0) {
-			packet = simulateWrongBits(packet, chance);
 
-			DatagramPacket dp = new DatagramPacket(packet, packetLength, inetAddr, port);
 
-			System.out.println("Current Length: " + packet.length);
-			
+			System.out.println(packetLength);
+			System.out.println(packet.length);
+			byte[] packetToSend = simulateWrongBits(packet, chance);
+			System.out.println(packetToSend.length);
+			DatagramPacket dp = new DatagramPacket(packetToSend, packetLength, inetAddr, port2);
+
+			System.out.println("Current Length: " + packetToSend.length);
+
 			if (simulateDuplicate(chance)) {
 				socketSend.send(dp);
 			}
@@ -206,15 +209,15 @@ public class AltBitSender {
 	 * @return true if the packet should be dublicated
 	 */
 	private byte[] simulateWrongBits(byte[] packet, Random chance) {
+		byte[] packetToReturn = packet.clone();
 		if (chance.nextDouble() <= chanceWrongBits) {
-			Collections.reverse(Arrays.asList(packet)); //Reverses array (List reverses the array too)
-			BitSet bitset = BitSet.valueOf(packet);
-			bitset.flip(0, bitset.length()); //Invert the array
-			packet = bitset.toByteArray();
+			for (int i = 0; i < packet.length; i++) {
+				packetToReturn[i] = packet[packet.length - 1 - i];
+			}
 			System.out.println("Wrong Bits");
 		}
 
-		return packet;
+		return packetToReturn;
 	}
 
 	private boolean simulateDuplicate(Random chance) {
