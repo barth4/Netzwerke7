@@ -24,10 +24,11 @@ public class AltBitSender {
 
 	private DatagramSocket socketSend;
 
-	// Count from 0
+	//Indexes of Data packet
 	private final int startSeq = 0;
 	private final int startChecksum = 1;
 	private final int startFileData = 9;
+	//Indexes of first packet
 	private final int startFileLength = 9;
 	private final int startFileName = 13;
 
@@ -47,37 +48,26 @@ public class AltBitSender {
 
 	private InetAddress inetAddr;
 	private int port;
-	private int port2; //Nur fuer localhost
 
 	/**
 	 * Initializes an AltBitSender.
 	 * 
-	 * @param hostName
-	 *            of the receiver
-	 * @param port
-	 *            of the receiver and of this sender
-	 * @param packetLength
-	 *            of the packets to be send
-	 * @param filePath
-	 *            to the file to be send
-	 * @param log
-	 *            if log should be activated
-	 * @throws SocketException
-	 *             if connection is bad
-	 * @throws FileNotFoundException
-	 *             if file could not be found or file name is too long
-	 * @throws IOException
-	 *             if file stream / location is bad
-	 * @throws NullPointerException
-	 *             if some parameters are null
+	 * @param hostName of the receiver
+	 * @param port of the receiver and of this sender
+	 * @param packetLength of the packets to be send
+	 * @param filePath to the file to be send
+	 * @param log if log should be activated
+	 * @throws SocketException if connection is bad
+	 * @throws FileNotFoundException if file could not be found or file name is too long
+	 * @throws IOException if file stream / location is bad
+	 * @throws NullPointerException if some parameters are null
 	 */
-	public AltBitSender(String hostName, int port, int port2, int packetLength, String filePath, boolean log)
+	public AltBitSender(String hostName, int port, int packetLength, String filePath, boolean log)
 			throws SocketException, FileNotFoundException, IOException, NullPointerException {
+
 		this.packetLength = packetLength;
 		this.packetFileDataLength = packetLength - startFileData;
 		this.log = log;
-
-		this.port2 = port2;
 
 		readFile(filePath);
 
@@ -86,14 +76,12 @@ public class AltBitSender {
 		this.packetLength = packetLength;
 		this.inetAddr = InetAddress.getByName(hostName);
 		this.port = port;
-		// socketReceive = new DatagramSocket(port);
 	}
 
 	/**
 	 * Sends the file.
 	 * 
-	 * @throws IOException
-	 *             if connection is bad
+	 * @throws IOException if connection is bad
 	 */
 	public void send() throws IOException {
 		boolean ackReceived = false;
@@ -107,10 +95,8 @@ public class AltBitSender {
 
 		for (int i = 0; i < packetCount; i++) { // Send file
 			do {// Correct ack received
-				System.out.println("Current seq: " + seq + " i: " + i);
 				sendFilePacket(i);
 				if ((ackReceived = receiveAck()) == true) {
-
 					seq = (byte) ((i)%2);
 				}
 			} while (!ackReceived);
@@ -121,17 +107,16 @@ public class AltBitSender {
 	/**
 	 * Sends the first packet.
 	 * 
-	 * @throws IOException
-	 *             if connection is bad
+	 * @throws IOException if connection is bad
 	 */
 	private void sendFirstPacket() throws IOException {
 
 		// Create packet
 		byte[] packetByte = new byte[packetLength];
 		byte[] data = fileName.getBytes();
-		packetByte[0] = seq;
-		writeIntoByteArray(packetByte, ByteBuffer.allocate(8).putLong(getChecksum(data)).array(), startChecksum);
-		writeIntoByteArray(packetByte, ByteBuffer.allocate(4).putInt(fileLength).array(), startFileLength);
+		packetByte[this.startSeq] = seq;
+		writeIntoByteArray(packetByte, ByteBuffer.allocate(Long.BYTES).putLong(getChecksum(data)).array(), startChecksum);
+		writeIntoByteArray(packetByte, ByteBuffer.allocate(Integer.BYTES).putInt(fileLength).array(), startFileLength);
 		writeIntoByteArray(packetByte, data, startFileName);
 
 		printPacket(packetByte, "Sender");
@@ -142,28 +127,30 @@ public class AltBitSender {
 	/**
 	 * Sends the packet of the file with the committed packetNumber.
 	 * 
-	 * @param packetNumber
-	 *            of all file packets
-	 * @throws IOException
-	 *             if connection is bad
+	 * @param packetNumber of all file packets
+	 * @throws IOException if connection is bad
 	 */
 	private void sendFilePacket(int packetNumber) throws IOException {
-		int packetSize = fileArray.length - packetNumber * (packetFileDataLength) < packetFileDataLength
-				? fileArray.length - packetNumber * (packetFileDataLength)
-						: packetFileDataLength;
-				// Copy next packet data to be send
-				byte[] data = new byte[packetSize];
-				System.arraycopy(fileArray, packetNumber * (packetFileDataLength), data, 0, packetSize);
+		int packetSize = packetFileDataLength;
 
-				// Create packet
-				byte[] packetByte = new byte[packetLength];
-				packetByte[startSeq] = seq;
-				writeIntoByteArray(packetByte, ByteBuffer.allocate(8).putLong(getChecksum(data)).array(), 1);
-				writeIntoByteArray(packetByte, data, startFileData);
+		//Last packet has maybe less bytes
+		if (fileArray.length - packetNumber * packetFileDataLength < packetFileDataLength) {
+			packetSize = fileArray.length - packetNumber * (packetFileDataLength);
+		}
 
-				printPacket(packetByte, "Sender");
+		// Copy data to be send in data array
+		byte[] data = new byte[packetSize];
+		System.arraycopy(fileArray, packetNumber * (packetFileDataLength), data, 0, packetSize);
 
-				sendPacket(packetByte);
+		// Create packet
+		byte[] packetByte = new byte[packetLength];
+		packetByte[startSeq] = seq;
+		writeIntoByteArray(packetByte, ByteBuffer.allocate(Long.BYTES).putLong(getChecksum(data)).array(), this.startChecksum);
+		writeIntoByteArray(packetByte, data, startFileData);
+
+		printPacket(packetByte, "Sender");
+
+		sendPacket(packetByte);
 	}
 
 	/**
@@ -182,15 +169,8 @@ public class AltBitSender {
 		}
 
 		if (packet.length != 0) {
-
-
-			System.out.println(packetLength);
-			System.out.println(packet.length);
 			byte[] packetToSend = simulateWrongBits(packet, chance);
-			System.out.println(packetToSend.length);
-			DatagramPacket dp = new DatagramPacket(packetToSend, packetLength, inetAddr, port2);
-
-			System.out.println("Current Length: " + packetToSend.length);
+			DatagramPacket dp = new DatagramPacket(packetToSend, packetLength, inetAddr, port);
 
 			if (simulateDuplicate(chance)) {
 				socketSend.send(dp);
@@ -201,12 +181,11 @@ public class AltBitSender {
 	}
 
 	/**
-	 * Simulates an unreliable channel. It returns true if the packet should
-	 * be duplicated otherwise false. In addition it changes the packet, either 
-	 * it inverts the packet (bit failure) or it deletes the packet (packet dropped).
+	 * Simulates if the packet got changed during sending.
 	 * 
 	 * @param packet to be changed
-	 * @return true if the packet should be dublicated
+	 * @param chance a random generator
+	 * @return the edited packet
 	 */
 	private byte[] simulateWrongBits(byte[] packet, Random chance) {
 		byte[] packetToReturn = packet.clone();
@@ -214,24 +193,35 @@ public class AltBitSender {
 			for (int i = 0; i < packet.length; i++) {
 				packetToReturn[i] = packet[packet.length - 1 - i];
 			}
-			System.out.println("Wrong Bits");
+			printMessage("AltBitSender: Packet got editted.");
 		}
 
 		return packetToReturn;
 	}
 
+	/**
+	 * Calculates if the packet should be send twice or not.
+	 * 
+	 * @param chance a random generator
+	 * @return true if the packet should be send twice, otherwise false.
+	 */
 	private boolean simulateDuplicate(Random chance) {
 		if (chance.nextDouble() <= chanceDuplicate) {
-			System.out.println("Duplicate");
+			printMessage("AltBitSender: Packet dublicated");
 			return true;
 		}
-
 		return false;
 	}
 
+	/**
+	 * Calculates if the packet should be deleted or not.
+	 * 
+	 * @param chance a random generator
+	 * @return true if the packet should be dropped, otherwise false.
+	 */
 	private boolean simulateDelete(Random chance) {
 		if (chance.nextDouble() <= chanceDelete) {
-			System.out.println("Deleted");
+			printMessage("AltBitSender: Packet dropped");
 			return true;
 		}
 		return false;
@@ -242,21 +232,20 @@ public class AltBitSender {
 	 * 
 	 * @return true if ack was correct, returns false if ack was incorrect or
 	 *         timeout
-	 * @throws IOException
-	 *             if connection is bad
+	 * @throws IOException if connection is bad
 	 */
 	private boolean receiveAck() throws IOException {
 		byte[] ack = new byte[1];
 		DatagramPacket packet = new DatagramPacket(ack, ack.length, inetAddr, port);
 		try {
 			socketSend.receive(packet);
-			printPacket(ack, "Empfaenger");
+			printPacket(ack, "Receiving Ack");
 			if (ack[0] == seq) { // Check if send seq equals ack
 				return true;
 			}
 			// return false wrong ack
 		} catch (SocketTimeoutException e) {
-			System.out.println("Empfaenger timeout");
+			printMessage("AltBitSender: Receiving Ack timeout");
 		} // return false timeout
 		return false;
 	}
@@ -264,13 +253,12 @@ public class AltBitSender {
 	/**
 	 * Generates a CRC32 checksum for the committed bytes.
 	 * 
-	 * @param bytes
+	 * @param bytes on which the checksum should be generated
 	 * @return long, the checksum of bytes
 	 */
 	private long getChecksum(byte[] bytes) {
 		Checksum checksum = new CRC32();
 		checksum.update(bytes, 0, bytes.length);
-		System.out.println("Checksum: " + checksum.getValue());
 		return checksum.getValue();
 	}
 
@@ -278,12 +266,9 @@ public class AltBitSender {
 	 * Writes the bytes of arrayCopy in arrayPaste starting at position start. Start
 	 * counts from 0.
 	 * 
-	 * @param arrayPaste
-	 *            in which should be copied
-	 * @param arrayCopy
-	 *            from which should be copied
-	 * @param start
-	 *            index of pasting in array. Counts from 0.
+	 * @param arrayPaste in which should be copied
+	 * @param arrayCopy from which should be copied
+	 * @param start index of pasting in array. Counts from 0.
 	 * @return false if arrayPaste is too small. True if success.
 	 */
 	private boolean writeIntoByteArray(byte[] arrayPaste, byte[] arrayCopy, int start) {
@@ -300,12 +285,9 @@ public class AltBitSender {
 	 * Reads the file in a byte array and calculates the numbers of packets to be
 	 * send.
 	 * 
-	 * @param filePath
-	 *            the location of the file.
-	 * @throws FileNotFoundException
-	 *             if the file was not found or file name is too long
-	 * @throws IOException
-	 *             if the file could not be read
+	 * @param filePath the location of the file.
+	 * @throws FileNotFoundException if the file was not found or file name is too long
+	 * @throws IOException if the file could not be read
 	 */
 	private void readFile(String filePath) throws FileNotFoundException, IOException {
 		File file = new File(filePath);
@@ -330,16 +312,28 @@ public class AltBitSender {
 	}
 
 	/**
-	 * Print data packet is log is actived.
+	 * Print information of data packet like seq/ack or checksum.
 	 * 
-	 * @param packet
-	 *            to be printed
-	 * @param stream
-	 *            who received/send the packet
+	 * @param packet to be printed
+	 * @param stream who received/send the packet
 	 */
 	private void printPacket(byte[] packet, String stream) {
+		String toPrint = "---------------------\n" + "AltBitSender: " + stream + ":\nSeq/Ack: " + packet[0] + "\nChecksum: ";
+		for (int i = startChecksum; i < startChecksum + Long.BYTES; i++) {
+			toPrint = toPrint + packet[i];
+		}
+		printMessage(toPrint);
+	}
+
+	/**
+	 * Prints the committed message if log is activated.
+	 * 
+	 * @param message to be printed
+	 */
+	private void printMessage(String message) {
 		if (log) {
-			System.out.println("---------------------\n" + stream + ":\nAck: "+ packet[0] + "   " + packet.toString() + "\n---------------------");
+			System.out.println(message);
 		}
 	}
+
 }

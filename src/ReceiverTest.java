@@ -109,7 +109,8 @@ public class ReceiverTest {
     public void testRun() {
 
         try {
-            AltBitSender abs = new AltBitSender("localhost", 23457, 23456, 1024, "test2.png", true);
+        	//Auf localhost eingestellt
+            AltBitSender abs = new AltBitSender("localhost", 23456, 1024, "test2.png", true);
             byte[] buffer = new byte[1024];
             Receiver rec = new Receiver(buffer, 23456);
             Thread t = new Thread(rec);

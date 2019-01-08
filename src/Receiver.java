@@ -16,7 +16,7 @@ import java.util.zip.Checksum;
 
 public class Receiver implements Runnable {
     public static final String PATH = "test";
-    static final String HOSTNAME = "localhost";
+    String HOSTNAME = "localhost";
     static int port = 23456;
     private byte[] buffer;
     private int portToSend;
