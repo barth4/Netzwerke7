@@ -1,3 +1,5 @@
+
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -309,7 +311,7 @@ public class AltBitSender {
 	 */
 	private void readFile(String filePath) throws FileNotFoundException, IOException {
 		File file = new File(filePath);
-
+	
 		fileName = file.getName();
 		if (fileName == null || fileName.length() > (packetLength - startFileName) / 2) {
 			throw new FileNotFoundException(

@@ -1,11 +1,9 @@
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.SocketException;
 
-import org.junit.Assert;
 import org.junit.Test;
+
 
 public class ReceiverTest {
 
@@ -109,7 +107,7 @@ public class ReceiverTest {
     public void testRun() {
 
         try {
-            AltBitSender abs = new AltBitSender("localhost", 23457, 23456, 1024, "test2.png", true);
+            AltBitSender abs = new AltBitSender("localhost", 23457, 23456, 1024, "./toSend/test.png", true);
             byte[] buffer = new byte[1024];
             Receiver rec = new Receiver(buffer, 23456);
             Thread t = new Thread(rec);

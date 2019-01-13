@@ -14,8 +14,13 @@ import java.util.Arrays;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
+/**
+ * class representing receiver
+ * @author Olenka
+ *
+ */
 public class Receiver implements Runnable {
-    public static final String PATH = "test";
+    
     static final String HOSTNAME = "localhost";
     static int port = 23456;
     private byte[] buffer;
@@ -37,11 +42,15 @@ public class Receiver implements Runnable {
     int counter = 0;
     int dataCounter = 0;
 
+    /**
+     * constructor 
+     * @param buffer byte buffer
+     * @param port port to create a datagram socket
+     */
     public Receiver(byte[] buffer, int port) {
         try {
             this.buffer = buffer;
             this.ds = new DatagramSocket(port);
-            this.ds.setSoTimeout(3000);
             this.dp = new DatagramPacket(buffer, buffer.length);
             currentState = State.IDLE;
             transition = new Transition[State.values().length][Condition.values().length];
@@ -57,18 +66,9 @@ public class Receiver implements Runnable {
         }
     }
 
-    public Receiver() {
-
-        transition = new Transition[State.values().length][Condition.values().length];
-        transition[State.IDLE.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new Start();
-        transition[State.WAIT_FOR_1.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new OneToZero();
-        transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_NOT_ALL_REC.ordinal()] = new ZeroToOne();
-        transition[State.WAIT_FOR_1.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndOne();
-        transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndZero();
-        transition[State.WAIT_FOR_0.ordinal()][Condition.CHECK_OK_ALL_REC.ordinal()] = new EndZero();
-
-    }
-
+    /**
+     * recieves the information sent
+     */
     public void receive() {
         try {
             while (true) {
@@ -80,15 +80,12 @@ public class Receiver implements Runnable {
                     addressToSend = dp.getAddress();
                     portToSend = dp.getPort();
                 }
-                System.out.println("receiving completed" + counter);
 
                 buffer = dp.getData();
                 port = dp.getPort();
-                System.out.println("wait for parse");
                 int number = parseByteArray();
-                System.out.println("parse completed");
-                if (number !=0) {
-                this.doTransition(this.defineConditon());
+                if (number != 0) {
+                    this.doTransition(this.defineConditon());
                 }
             }
 
@@ -103,17 +100,20 @@ public class Receiver implements Runnable {
         }
     }
 
+    /**
+     * gets a byte array, parses it and stores the received information into the
+     * corresponding variables
+     * 
+     * @return received file size
+     */
     public int parseByteArray() {
         byte[] seqNrBytes = new byte[1];
         byte[] checkSumBytes = new byte[8];
-        // int fileSize = 0;
         System.arraycopy(buffer, 0, seqNrBytes, 0, seqNrBytes.length);
-        int seqToPrint = (int) seqNrBytes[0];
-        System.out.println("sended sequenznr: " + seqToPrint);
         System.arraycopy(buffer, 1, checkSumBytes, 0, checkSumBytes.length);
         seqNr = seqNrBytes[0];
         if (seqNr != 0 && seqNr != 1) {
-            return 0; //TODO
+            return 0; // TODO
         }
         checkSum = ByteBuffer.wrap(checkSumBytes).getLong();
         checkSum = Long.parseLong(Long.toUnsignedString(checkSum, 10));
@@ -127,34 +127,26 @@ public class Receiver implements Runnable {
             String fileName;
             try {
                 fileName = new String(fileNameByte, "UTF-8");// if the charset is UTF-8; "ISO-8859-1"
-                file = new File(PATH + fileName);
+                file = new File(fileName);
                 fileSize = fileLengthByte[0] << 24 | (fileLengthByte[1] & 0xFF) << 16 | (fileLengthByte[2] & 0xFF) << 8
                         | (fileLengthByte[3] & 0xFF);
                 dataCounter = fileSize / (buffer.length - 9);
-//                if (fileSize % (buffer.length - 9) != 0) {
-//                	++dataCounter;
-//                }
+                // if (fileSize % (buffer.length - 9) != 0) {
+                // ++dataCounter;
+                // }
             } catch (UnsupportedEncodingException e) {
                 e.printStackTrace();
             }
         } else {
-        	long dataSize = buffer.length - 9;
-        	if (dataCounter == 0) {
-        		dataSize = fileSize % (buffer.length - 9);
-        	}
-            System.out.println("FileSize = " + fileSize + " FileLänge = " + file.length());
-//            long dataSize = fileSize - file.length() < buffer.length - 9 ? fileSize - file.length() : buffer.length - 9;
+            long dataSize = buffer.length - 9;
+            if (dataCounter == 0) {
+                dataSize = fileSize % (buffer.length - 9);
+            }
+           
             data = new byte[(int) dataSize];
             System.arraycopy(buffer, 9, data, 0, (int) dataSize); // file.length() fileSize
-            System.out.println("New data: ");
-
-            for (int j = 0; j < data.length; j++) {
-                System.out.print(data[j]);
-            }
-
-            System.out.println("");
-            System.out.println("Länge der Nutzdaten:" + data.length);
-        }
+      
+       }
         return fileSize;
 
     }
@@ -174,13 +166,16 @@ public class Receiver implements Runnable {
         return Arrays.copyOf(bytes, i + 1);
     }
 
+    /**
+     * sends an acknoledgement to sender
+     */
     public void sendACK() {
         try {
             byte[] seqBytes = new byte[] { (byte) seqNr };
 
             ds.send(new DatagramPacket(seqBytes, 1, addressToSend, portToSend));
 
-            System.out.println("ack gesendet" + seqBytes[0]);
+            System.out.println("Receiver: Sent ACK: " + seqBytes[0]);
 
         } catch (IOException e) {
             // TODO Auto-generated catch block
@@ -189,15 +184,24 @@ public class Receiver implements Runnable {
 
     }
 
-    public static void saveData() {// input param inputstream
-    }
-
+    /**
+     * generates checksum
+     * 
+     * @param bytes
+     *            number of bytes
+     * @return checksum
+     */
     private long getChecksum(byte[] bytes) {
         Checksum checksum = new CRC32();
         checksum.update(bytes, 0, bytes.length);
         return checksum.getValue();
     }
 
+    /**
+     * defines reciever's condition
+     * 
+     * @return an actual condiition
+     */
     public Condition defineConditon() {
         byte[] dataToCheck;
         if (currentState == State.IDLE) {
@@ -207,8 +211,7 @@ public class Receiver implements Runnable {
         }
 
         actualChecksum = getChecksum(dataToCheck);
-        System.out.println("New Checksum: " + actualChecksum);
-System.out.println("Current Seq: " + this.seqNr);
+
         if (checkSum != actualChecksum || (currentState == State.WAIT_FOR_0 && this.seqNr == 1)
                 || (currentState == State.WAIT_FOR_1 && this.seqNr == 0)) {
             return Condition.DUPLICATE_SQNR_OR_CHECK_NOT_OK;
@@ -221,6 +224,12 @@ System.out.println("Current Seq: " + this.seqNr);
         }
     }
 
+    /**
+     * triggers a transition in state machine
+     * 
+     * @param input
+     *            an input condition
+     */
     public void doTransition(Condition input) {
         System.out.println("Condition: " + input);
 
@@ -235,23 +244,54 @@ System.out.println("Current Seq: " + this.seqNr);
         System.out.println("INFO State: " + currentState);
     }
 
+    /**
+     * enum representing states
+     * 
+     * @author Olenka
+     *
+     */
     enum State {
         IDLE, WAIT_FOR_0, WAIT_FOR_1
     }
 
+    /**
+     * enum representing conditions
+     * 
+     * @author Olenka
+     *
+     */
     enum Condition {
         CHECK_OK_NOT_ALL_REC, CHECK_OK_ALL_REC, DUPLICATE_SQNR_OR_CHECK_NOT_OK
     }
 
+    /**
+     * class representing transition
+     * 
+     * @author Olenka
+     *
+     */
     abstract class Transition {
+        /**
+         * triggers a transition
+         * 
+         * @param input
+         *            an input condition
+         * @return new state after the transition execution
+         */
         abstract public State execute(Condition input);
     }
 
+    /**
+     * special transition that leaves a state machine in the same state as it was
+     * before it
+     * 
+     * @author Olenka
+     *
+     */
     class StayInState extends Transition {
         @Override
         public State execute(Condition input) {
-            System.out.println("Wir bleiben im Zustand");
-            System.out.println("Checksum: " + checkSum + " ; " + "actual checksum " + actualChecksum);
+
             if (checkSum == actualChecksum) {
                 sendACK();
             }
@@ -260,12 +300,17 @@ System.out.println("Current Seq: " + this.seqNr);
         }
     }
 
+    /**
+     * stating a new session
+     * 
+     * @author Olenka
+     *
+     */
     class Start extends Transition {
         @Override
         public State execute(Condition input) {
             try {
                 file.createNewFile();
-
                 sendACK();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -274,6 +319,12 @@ System.out.println("Current Seq: " + this.seqNr);
         }
     }
 
+    /**
+     * transition from state_0 to state_1
+     * 
+     * @author Olenka
+     *
+     */
     class ZeroToOne extends Transition {
         @Override
         public State execute(Condition input) {
@@ -284,18 +335,28 @@ System.out.println("Current Seq: " + this.seqNr);
         }
     }
 
+    /**
+     * transition from state_1 to state_0
+     * 
+     * @author Olenka
+     *
+     */
     class OneToZero extends Transition {
         @Override
         public State execute(Condition input) {
-            System.out.println("Now in transition method onetozero");
             saveFile(data);
             --dataCounter;
             sendACK();
-            System.out.println("Now in transition method onetozero ack sended");
             return State.WAIT_FOR_0;
         }
     }
 
+    /**
+     * session ends in state_1
+     * 
+     * @author Olenka
+     *
+     */
     class EndOne extends Transition {
         @Override
         public State execute(Condition input) {
@@ -305,6 +366,12 @@ System.out.println("Current Seq: " + this.seqNr);
         }
     }
 
+    /**
+     * session ends in state_0
+     * 
+     * @author Olenka
+     *
+     */
     class EndZero extends Transition {
         @Override
         public State execute(Condition input) {
@@ -314,8 +381,13 @@ System.out.println("Current Seq: " + this.seqNr);
         }
     }
 
+    /**
+     * saves the received data into a file
+     * 
+     * @param data
+     *            bytes received
+     */
     public void saveFile(byte data[]) {
-
         FileOutputStream out;
         try {
             out = new FileOutputStream(file.getAbsolutePath(), true);
@@ -325,25 +397,48 @@ System.out.println("Current Seq: " + this.seqNr);
             // TODO Auto-generated catch block
             e.printStackTrace();
         }
-
     }
 
+    /**
+     * gets a current state
+     * 
+     * @return current state
+     */
     public State getCurrentState() {
         return currentState;
     }
 
+    /**
+     * sets a current state
+     * 
+     * @param currentState
+     *            state to be set
+     */
     public void setCurrentState(State currentState) {
         this.currentState = currentState;
     }
 
+    /**
+     * gets sequence number
+     * 
+     * @return sequence number
+     */
     public int getSeqNr() {
         return seqNr;
     }
 
+    /**
+     * gets checksum
+     * 
+     * @return checksum
+     */
     public long getCheckSum() {
         return checkSum;
     }
 
+    /**
+     * thread run method
+     */
     @Override
     public void run() {
         this.receive();
